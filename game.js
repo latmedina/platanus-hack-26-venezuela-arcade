@@ -43,19 +43,23 @@ for (const [c, ks] of Object.entries(CABINET_KEYS)) for (const k of ks) K2A[norm
 
 const held = {};
 const prs = {};
+const lastDn = {}; // ultima vez que llego cada tecla (la palanca del telefono manda pulsos)
 window.addEventListener('keydown', (e) => {
   au();
   const c = K2A[norm(e.key)];
   if (!c) return;
   if (!held[c]) prs[c] = 1;
   held[c] = 1;
+  lastDn[c] = performance.now();
 });
 window.addEventListener('keyup', (e) => {
   const c = K2A[norm(e.key)];
   if (c) held[c] = 0;
 });
 // cualquiera de los dos joysticks controla al chamo
-const hold = (c) => (held['P1_' + c] || held['P2_' + c] ? 1 : 0);
+// una direccion cuenta como mantenida si esta apretada o si llego un pulso hace muy poco
+const on = (k) => held[k] || performance.now() - (lastDn[k] || -1e9) < 140;
+const hold = (c) => (on('P1_' + c) || on('P2_' + c) ? 1 : 0);
 const tap = (...cs) => cs.some((c) => prs['P1_' + c] || prs['P2_' + c] || prs[c]);
 const tapGo = () => tap('START1', 'START2', '1');
 
@@ -206,8 +210,10 @@ function music(bpm) {
     tone(mf(harp[s]), sd * 0.9, 'triangle', 0.08, w);
     if (s === 0) tone(mf(c[0] - 24), sd * 2.5, 'triangle', 0.15, w);
     if (s === 3) tone(mf(c[2] - 24), sd * 1.5, 'triangle', 0.11, w);
-    if (s === 2 || s === 5) c.forEach((n) => tone(mf(n), sd * 0.5, 'square', 0.012, w));
-    noise(0.04, s % 3 === 0 ? 0.06 : 0.03, w);
+    if (!MOB) {
+      if (s === 2 || s === 5) c.forEach((n) => tone(mf(n), sd * 0.5, 'square', 0.012, w));
+      noise(0.04, s % 3 === 0 ? 0.06 : 0.03, w);
+    }
     mI++;
     mT += sd;
   }
@@ -522,7 +528,7 @@ const hx = (...a) => tx(...a).setScrollFactor(0);
 function create() {
   S = this;
   MOB = !S.sys.game.device.os.desktop;
-  if (MOB) FXM = 6;
+  if (MOB) FXM = 9;
   mkFont();
   PPL.forEach((c, v) =>
     [0, 1].forEach((fr) => {
@@ -936,8 +942,9 @@ function mkHud() {
   hud.spin = tx(640, H - 17, '3:MOCHILAZO', 2);
   hud.combo = tx(W - 24, 52, '', 3, 0xf878f8, 1);
   hud.up = tx(W / 2, 70, '^ TREN ^', 3, 0xf8b800);
+  hud.fps = tx(W - 30, 52, '', 2, 0x7c7c7c, 1);
   hud.dot = S.add.rectangle(W - 10, 300, 14, 10, 0xf8b800).setStrokeStyle(2, 0x111111);
-  hud.all = a.concat([hud.sc, hud.st, hud.t, hud.push, hud.kick, hud.spin, hud.combo, hud.up, hud.dot], hud.lv);
+  hud.all = a.concat([hud.sc, hud.st, hud.t, hud.push, hud.kick, hud.spin, hud.combo, hud.up, hud.dot, hud.fps], hud.lv);
   hud.all.forEach((o) => o.setDepth(9000).setScrollFactor(0).setVisible(false));
 }
 function showHud(v) {
@@ -954,6 +961,7 @@ function drawHud(time) {
   hud.combo.setText(comboN > 1 && comboT > 0 ? 'COMBO X' + comboN : '');
   hud.up.setVisible(S.cameras.main.scrollY > 120 && Math.floor(time / 300) % 2 === 0);
   hud.dot.y = 72 + clamp((pl.y - TY) / (WH - TY), 0, 1) * 456;
+  if (MOB) hud.fps.setText(Math.round(S.game.loop.actualFps) + ' FPS');
 }
 
 // ---------- Pantalla de titulo ----------
@@ -1051,7 +1059,7 @@ function updTitle(dt, time) {
 // ---------- Gente ----------
 function npc(t, x, y) {
   // tope de gente para que no se trabe (en telefono, la mitad)
-  if ((t === 'w' || t === 'r') && (ppl.length >= (MOB ? 75 : 140) || (MOB && Math.random() < 0.4))) return null;
+  if ((t === 'w' || t === 'r') && (ppl.length >= (MOB ? 110 : 140) || (MOB && Math.random() < 0.15))) return null;
   const hv = t !== 'v' && t !== 'a' && Math.random() < heavyP;
   const v = (Math.random() * PPL.length) | 0;
   const n = {
@@ -1687,7 +1695,7 @@ function startLevel(pre) {
   spinCd = 0;
   warned = 0;
   beepS = 99;
-  salQ = Math.min(12 + L * 3, 30) >> MOB;
+  salQ = Math.min(12 + L * 3, 30);
   salT = 0.6;
   runT = 1;
   lvT = 0;
@@ -2093,7 +2101,7 @@ function updName(dt) {
 function update(time, delta) {
   // aunque el telefono de pocos cuadros, el juego corre a su velocidad real (en pasos chicos)
   const full = Math.min(delta, 120) / 1000;
-  const n = Math.ceil(full / 0.034);
+  const n = Math.min(3, Math.ceil(full / 0.034));
   const dt = full / n;
   for (let i = 0; i < n; i++) {
     if (ph === 'title') updTitle(dt, time);
