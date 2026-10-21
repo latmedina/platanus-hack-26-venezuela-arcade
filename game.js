@@ -447,6 +447,8 @@ let hs = 0; // hit-stop: congela un instante en los golpes fuertes
 let spinCd = 0;
 let oleT = 0;
 let gapW = 24; // media apertura de las puertas (se cierran al final)
+let MOB = false; // telefono o tablet: menos gente y efectos para que vaya fluido
+let FXM = 14; // tope de efectos vivos
 let fxN = 0; // efectos vivos, con tope para no trabar el juego
 let fxF = 0; // efectos creados en este frame
 let sndT = 0;
@@ -463,6 +465,7 @@ new Phaser.Game({
   parent: 'game-root',
   backgroundColor: '#000000',
   pixelArt: true,
+  render: { pixelArt: true, powerPreference: 'high-performance' },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: W, height: H },
   scene: { create, update },
 });
@@ -510,7 +513,7 @@ function mkFont() {
 
 function tx(x, y, s, sz, col = 0xffffff, ox = 0.5, oy = 0.5, sh = 1) {
   const t = S.add.bitmapText(x, y, 'f', String(s).toUpperCase()).setScale(sz).setOrigin(ox, oy).setTint(col);
-  if (sh && t.setDropShadow) t.setDropShadow(0.5, 0.5, 0x000000, 1);
+  if (sh && !MOB && t.setDropShadow) t.setDropShadow(0.5, 0.5, 0x000000, 1);
   return t;
 }
 // texto fijo en pantalla (no se mueve con la camara)
@@ -518,6 +521,8 @@ const hx = (...a) => tx(...a).setScrollFactor(0);
 
 function create() {
   S = this;
+  MOB = !S.sys.game.device.os.desktop;
+  if (MOB) FXM = 6;
   mkFont();
   PPL.forEach((c, v) =>
     [0, 1].forEach((fr) => {
@@ -1045,7 +1050,8 @@ function updTitle(dt, time) {
 
 // ---------- Gente ----------
 function npc(t, x, y) {
-  if (ppl.length >= 140 && (t === 'w' || t === 'r')) return null; // tope para que no se trabe
+  // tope de gente para que no se trabe (en telefono, la mitad)
+  if ((t === 'w' || t === 'r') && (ppl.length >= (MOB ? 75 : 140) || (MOB && Math.random() < 0.4))) return null;
   const hv = t !== 'v' && t !== 'a' && Math.random() < heavyP;
   const v = (Math.random() * PPL.length) | 0;
   const n = {
@@ -1182,7 +1188,7 @@ function knock(o, vx, vy, quiet) {
 }
 
 function bam(x, y) {
-  if (fxN > 14 || fxF > 2 || !onScreen(y)) return;
+  if (fxN > FXM || fxF > 2 || !onScreen(y)) return;
   fxN++;
   fxF++;
   const t = S.add.image(x, y, 'star').setScale(2).setDepth(6500);
@@ -1201,7 +1207,7 @@ function bam(x, y) {
 
 // zapatos, telefonos y bolsos saliendo volando
 function flyItem(x, y, vx, vy) {
-  if (fxN > 14 || fxF > 2 || !onScreen(y)) return;
+  if (fxN > FXM || fxF > 2 || !onScreen(y)) return;
   fxN++;
   fxF++;
   const it = S.add.image(x, y - 20, pick(ITEMS)).setScale(PS).setDepth(y);
@@ -1219,7 +1225,7 @@ function flyItem(x, y, vx, vy) {
 }
 
 function dust(x, y) {
-  if (fxN > 12 || fxF > 2 || !onScreen(y)) return;
+  if (fxN > FXM - 2 || fxF > 2 || !onScreen(y)) return;
   fxF++;
   for (let i = 0; i < 2; i++) {
     fxN++;
@@ -1681,7 +1687,7 @@ function startLevel(pre) {
   spinCd = 0;
   warned = 0;
   beepS = 99;
-  salQ = Math.min(12 + L * 3, 30);
+  salQ = Math.min(12 + L * 3, 30) >> MOB;
   salT = 0.6;
   runT = 1;
   lvT = 0;
@@ -1980,7 +1986,7 @@ function updEnd(dt, time) {
 }
 
 function pop(x, y, s, c, sz = 3, must) {
-  if (!must && (fxN > 14 || fxF > 2 || !onScreen(y))) return;
+  if (!must && (fxN > FXM || fxF > 2 || !onScreen(y))) return;
   fxN++;
   fxF++;
   const w = s.length * 6 * sz + 12;
@@ -2085,19 +2091,25 @@ function updName(dt) {
 }
 
 function update(time, delta) {
-  const dt = Math.min(delta, 50) / 1000;
-  if (ph === 'title') updTitle(dt, time);
-  else if (ph === 'ready') updReady(dt, time);
-  else if (ph === 'play') updPlay(dt, time);
-  else if (ph === 'win' || ph === 'fail') updEnd(dt, time);
-  else if (ph === 'over') updOver(dt);
-  else if (ph === 'name') updName(dt);
-  else if (ph === 'pause' && tap('START1', 'START2')) {
-    ovG.forEach((o) => o.destroy());
-    ovG = [];
-    ph = 'play';
-    mOn = true;
+  // aunque el telefono de pocos cuadros, el juego corre a su velocidad real (en pasos chicos)
+  const full = Math.min(delta, 120) / 1000;
+  const n = Math.ceil(full / 0.034);
+  const dt = full / n;
+  for (let i = 0; i < n; i++) {
+    if (ph === 'title') updTitle(dt, time);
+    else if (ph === 'ready') updReady(dt, time);
+    else if (ph === 'play') updPlay(dt, time);
+    else if (ph === 'win' || ph === 'fail') updEnd(dt, time);
+    else if (ph === 'over') updOver(dt);
+    else if (ph === 'name') updName(dt);
+    else if (ph === 'pause' && tap('START1', 'START2')) {
+      ovG.forEach((o) => o.destroy());
+      ovG = [];
+      ph = 'play';
+      mOn = true;
+    }
+    // cada boton se cuenta una sola vez por cuadro
+    for (const k in prs) delete prs[k];
   }
   fxF = 0;
-  for (const k in prs) delete prs[k];
 }
