@@ -1,5 +1,5 @@
 {
-  "game_name": "Platanus Hack: Caracas Brick Breaker",
-  "description": "Batalla campal por romper la mayor cantidad de ladrillos",
-  "player_mode": "two_player"
+  "game_name": "Hora Pico: Metro de Caracas",
+  "description": "¡Las puertas se van a cerrar! Recorre la Línea 1 empujando, pateando y repartiendo mochilazos entre malandros, señoras con bolsas, escaleras dañadas, huecos, charcos y apagones. ¡Échale pichón y móntate antes de que se vaya el tren!",
+  "player_mode": "single_player"
 }
